@@ -2,44 +2,44 @@ name: "send weixin message"
 description: "send weixin message"
 inputs:
   weixin:
-    description: 'credential to get weixin token'
+    description: "credential to get weixin token"
     required: true
   result:
-    description: 'main job result message'
+    description: "main job result message"
     required: true
   now:
-    description: 'action begin time'
+    description: "action begin time"
     required: true
   href:
-    description: 'filename url for web access'
+    description: "filename url for web access"
     required: false
 
 runs:
   using: "composite"
   steps:
-      - name: install jq
-        run: sudo apt-get install -y jq
-        shell: bash
+    - name: install jq
+      run: sudo apt-get install -y jq
+      shell: bash
 
-      - name: get token send weixin
-        run: |
-          token=$(echo $(curl -sS "https://qyapi.weixin.qq.com/cgi-bin/gettoken?${{inputs.weixin}}") \
-            | jq --raw-output .access_token)
-          header="Content-Type: application/json"
-          url="https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=${token}"
-          repo=${{github.event.repository.name}}
-          ref=${GITHUB_REF##*/}
-          result=${{inputs.result}}
-          now=${{inputs.now}}
-          href=${{inputs.href}}
-          message="${repo}/${ref}\n${result}_${now}\n${href}"
-          curl -H $header -X POST $url \
-          --data-raw '{
-            "touser" : "${{github.actor}}",
-            "msgtype" : "text",
-            "agentid" : 1000002,
-            "text" : {
-              "content" : "'"${message}"'"
-            }
-          }'
-        shell: bash
+    - name: get token send weixin
+      run: |
+        token=$(echo $(curl -sS "https://qyapi.weixin.qq.com/cgi-bin/gettoken?${{inputs.weixin}}") \
+          | jq --raw-output .access_token)
+        header="Content-Type: application/json"
+        url="https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=${token}"
+        repo=${{github.event.repository.name}}
+        ref=${GITHUB_REF##*/}
+        result=${{inputs.result}}
+        now=${{inputs.now}}
+        href=${{inputs.href}}
+        message="${repo}/${ref}\n${result}_${now}${href}"
+        curl -H $header -X POST $url \
+        --data-raw '{
+          "touser" : "${{github.actor}}",
+          "msgtype" : "text",
+          "agentid" : 1000002,
+          "text" : {
+            "content" : "'"${message}"'"
+          }
+        }'
+      shell: bash
