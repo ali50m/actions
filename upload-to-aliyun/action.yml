@@ -1,0 +1,23 @@
+name: "upload to aliyun"
+description: "upload to aliyun"
+inputs:
+  filename:
+    description: "file path to be uploaded"
+    required: true
+  ALI_OSS:
+    description: "oss secrets for uploading file"
+    required: true
+  oss-util-version:
+    description: "oss util version"
+    default: 1.7.9
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - name: copy to oss
+      run: |
+        wget http://gosspublic.alicdn.com/ossutil/${{inputs.oss-util-version}}/ossutil64 -O ossutil
+        chmod +x ossutil
+        ./ossutil cp -f ${{inputs.filename}} ${{inputs.ALI_OSS}}
+      shell: bash
