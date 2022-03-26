@@ -1,0 +1,20 @@
+name: "mirror to gitee"
+description: "mirror to gitee"
+inputs:
+  username:
+    description: "username for gitee"
+    required: true
+  GITEE_TOKEN:
+    description: "gitee token"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: push to gitee
+      run: |
+        git fetch --unshallow
+        git remote add gitee \
+          https://${{inputs.username}}:${{inputs.GITEE_TOKEN}}@gitee.com/${{inputs.username}}/${{github.event.repository.name}}.git
+        git push -f --set-upstream gitee ${GITHUB_REF##*/}
+      shell: bash
