@@ -33,6 +33,7 @@ runs:
         now=${{inputs.now}}
         href=${{inputs.href}}
         message="${repo}/${ref}\n${result}_${now}${href}"
+        echo $message
         curl -H $header -X POST $url \
         --data-raw '{
           "touser" : "${{github.actor}}",
