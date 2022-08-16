@@ -27,6 +27,6 @@ runs:
         message="${repo}/${ref}\n${result}_${now}${href}"
         echo $message
         url="https://f.w9.work/api/SendWeiXinMessage?code=abcd&text=${message}"
-        curl -X GET $url -H "accept: text/plain"
+        curl $url
 
       shell: bash
