@@ -28,11 +28,12 @@ runs:
         echo $message
         # message="abcdzzz"
         url="https://f.w9.work/api/SendWeiXinMessage?code=abcd&text=${message}"
-        url="https://f.w9.work/api/SendWeiXinMessage?code=abcd"
+        url="https://f.w9.work/api/SendWeiXinMessage"
         # curl $url
         header="Content-Type: application/json"
         curl -H $header -X Get $url \
         --data-raw '{
+          "code" : "abcd"
           "text" : "${message}"
         }'
       shell: bash
