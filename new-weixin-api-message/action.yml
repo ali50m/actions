@@ -24,7 +24,6 @@ runs:
         result=${{inputs.result}}
         now=${{inputs.now}}
         href="${{inputs.href}}"
-        # message="${repo}/${ref}%0A${result}_${now}${href}"
         message=$(printf "${repo}/${ref}\n${result}_${now}${href}")
         echo $message
         curl -G "https://f.w9.work/api/SendWeiXinMessage?code=${{inputs.weixin}}" --data-urlencode "text=${message}"
