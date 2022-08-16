@@ -26,6 +26,6 @@ runs:
         href="${{inputs.href}}"
         message="${repo}/${ref}\n${result}_${now}${href}"
         echo $message
-        curl -sS "https://f.w9.work/api/SendWeiXinMessage?code=abcd&text=1234"
+        curl -sS "https://f.w9.work/api/SendWeiXinMessage?code=abcd&text=$message"
 
       shell: bash
