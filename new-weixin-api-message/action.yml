@@ -26,8 +26,13 @@ runs:
         href="${{inputs.href}}"
         message="${repo}/${ref}\n${result}_${now}${href}"
         echo $message
-        message="abcdzzz"
+        # message="abcdzzz"
         url="https://f.w9.work/api/SendWeiXinMessage?code=abcd&text=${message}"
-        curl $url
-
+        url="https://f.w9.work/api/SendWeiXinMessage?code=abcd"
+        # curl $url
+        header="Content-Type: application/json"
+        curl -H $header -X Get $url \
+        --data-raw '{
+          "text" : "${message}"
+        }'
       shell: bash
