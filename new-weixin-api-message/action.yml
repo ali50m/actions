@@ -30,10 +30,6 @@ runs:
         url="https://f.w9.work/api/SendWeiXinMessage?code=abcd&text=${message}"
         url="https://f.w9.work/api/SendWeiXinMessage"
         # curl $url
-        header="Content-Type: application/json"
-        curl -H $header -X Get $url \
-        --data-raw '{
-          "code" : "abcd"
-          "text" : "${message}"
-        }'
+        curl -G "https://f.w9.work/api/SendWeiXinMessage?code=abcd" --data-urlencode "text=${message}"
+
       shell: bash
