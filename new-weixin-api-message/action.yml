@@ -1,0 +1,30 @@
+name: "send weixin api message"
+description: "send weixin api message"
+inputs:
+  weixin:
+    description: "credential to call weixin API"
+    required: true
+  result:
+    description: "main job result message"
+    required: true
+  now:
+    description: "action begin time"
+    required: true
+  href:
+    description: "filename url for web access"
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - name: call API to send weixin
+      run: |
+        repo=${{github.event.repository.name}}
+        ref=${GITHUB_REF##*/}
+        result=${{inputs.result}}
+        now=${{inputs.now}}
+        href="${{inputs.href}}"
+        message="${repo}/${ref}\n${result}_${now}${href}"
+        echo $message
+        curl -X GET "https://f.w9.work/api/SendWeiXinMessage?text=${message}&code=${{inputs.weixin}}" -H "accept: text/plain"
+      shell: bash
