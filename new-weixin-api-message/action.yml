@@ -26,7 +26,5 @@ runs:
         href="${{inputs.href}}"
         message="${repo}/${ref}\n${result}_${now}${href}"
         echo $message
-        echo "https://f.w9.work/api/SendWeiXinMessage?code=${{ inputs.weixin }}&text=${message}" > tempmsg
-        cat tempmsg
-        curl -X GET "https://f.w9.work/api/SendWeiXinMessage?code=${{ inputs.weixin }}&text=${message}" -H "accept: text/plain"
+        curl -X GET "https://f.w9.work/api/SendWeiXinMessage?code=${{inputs.weixin}}&text=${message}" -H "accept: text/plain"
       shell: bash
