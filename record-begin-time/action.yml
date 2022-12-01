@@ -10,5 +10,5 @@ runs:
     - id: record
       run: |
         export now="$(TZ=Asia/Shanghai date +%H:%M:%S@%Y-%m-%d)"
-        echo "::set-output name=now::${now}"
+        echo "now=${now}" >> $GITHUB_OUTPUT
       shell: bash
