@@ -10,6 +10,6 @@ runs:
   using: "composite"
   steps:
    - name: Check if my_variable is set
-      run:
-        echo "filename is ${{inputs.filename}}"
-      shell: bash
+     run:
+       echo "filename is ${{inputs.filename}}"
+     shell: bash
