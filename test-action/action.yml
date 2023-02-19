@@ -9,12 +9,24 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Check if my_variable is set
-      run: |
-        if [[ -v ${{secrets.MY_TOKEN}} ]]; then
-          echo "MY_VARIABLE is set"
-        else
-          echo "MY_VARIABLE is not set"
-        fi
-        echo "filename is ${{inputs.filename}}"
-      shell: bash
+    # - name: Check if my_variable is set
+    #   run: |
+    #     if [[ -v ${{secrets.MY_TOKEN}} ]]; then
+    #       echo "MY_VARIABLE is set"
+    #     else
+    #       echo "MY_VARIABLE is not set"
+    #     fi
+    #     echo "filename is ${{inputs.filename}}"
+    #   shell: bash
+
+    # - name: Check if my_variable is set
+    #   run: |
+    #     if [[ -v ${{secrets.MY_TOKEN}} ]]; then
+    #       echo "MY_VARIABLE is set"
+    #     else
+    #       echo "MY_VARIABLE is not set"
+    #     fi
+    #     echo "filename is ${{inputs.filename}}"
+    #   shell: bash
+    - name: check out
+      uses: actions/checkout@v3
