@@ -1,0 +1,8 @@
+name: "my-check-out"
+description: "my proxy of calling actions/checkout"
+
+runs:
+  using: "composite"
+  steps:
+    - name: check out with v3
+      uses: actions/checkout@v3
