@@ -28,8 +28,7 @@ runs:
         my_variable=$(cat << EOF
         ${repo}/${ref}
         ${result}_${now}${href}
-        EOF
-        )
+        EOF)
         echo $message
         curl -G "https://f.w9.work/api/SendWeiXinMessage?code=${{inputs.weixin}}" --data-urlencode "text=${message}"
 
