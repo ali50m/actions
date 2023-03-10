@@ -10,7 +10,7 @@ runs:
     - id: record
       if: runner.os == 'Linux' || runner.os == 'macOS'
       run: |
-        export now="$(TZ=Asia/Shanghai date +%H:%M:%S@%Y-%m-%d)"
+        now="$(TZ=Asia/Shanghai date +%H:%M:%S@%Y-%m-%d)"
         echo "now=${now}" >> $GITHUB_OUTPUT
       shell: bash
       
