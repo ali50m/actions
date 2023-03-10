@@ -1,0 +1,21 @@
+name: "new record begin time"
+description: "record begin time"
+outputs:
+  now:
+    description: "begin time"
+    value: ${{ steps.record.outputs.now }} ${{ steps.recordWindows.outputs.now }}
+runs:
+  using: "composite"
+  steps:
+    - id: record
+      if: runner.os == 'Linux'
+      run: |
+        export now="$(TZ=Asia/Shanghai date +%H:%M:%S@%Y-%m-%d)"
+        echo "::set-output name=now::${now}"
+      shell: bash
+    - id: recordWindows
+      if: runner.os == 'Windows'
+      run: |
+        $now = [TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, [TimeZoneInfo]::FindSystemTimeZoneById("China Standard Time")).ToString("HH:mm:ss@yyyy-MM-dd", $null)
+        echo "now=${now}" >> $Env:GITHUB_OUTPUT
+      shell: pwsh
