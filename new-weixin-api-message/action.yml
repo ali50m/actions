@@ -18,6 +18,7 @@ runs:
   using: "composite"
   steps:      
     - name: call API to send weixin
+      shell: bash
       run: |
         repo=${{github.event.repository.name}}
         ref=${GITHUB_REF##*/}
@@ -47,5 +48,3 @@ runs:
             "content" : "'"${message}"'"
           }
         }'
-
-      shell: bash
