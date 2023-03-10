@@ -29,8 +29,14 @@ runs:
         ${repo}/${ref}
         ${result}_${now}${href}
         EOF)
+        newmessage1=$(cat <<-END
+        ${repo}/${ref}
+        ${result}_${now}${href}
+        END
+        )
         echo $message
         echo $newmessage
-        curl -G "https://f.w9.work/api/SendWeiXinMessage?code=${{inputs.weixin}}" --data-urlencode "text=${newmessage}"
+        echo $newmessage1
+        curl -G "https://f.w9.work/api/SendWeiXinMessage?code=${{inputs.weixin}}" --data-urlencode "text=${newmessage1}"
 
       shell: bash
