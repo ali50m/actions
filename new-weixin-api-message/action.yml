@@ -24,19 +24,12 @@ runs:
         result=${{inputs.result}}
         now=${{inputs.now}}
         href="${{inputs.href}}"
-        # message=$(printf "${repo}/${ref}\n${result}_${now}${href}")
-        # newmessage=$(cat << EOF
-        # ${repo}/${ref}
-        # ${result}_${now}${href}
-        # EOF)
-        newmessage1=$(cat <<-END
+        message=$(cat <<-END
         ${repo}/${ref}
         ${result}_${now}${href}
         END
         )
         # echo $message
-        # echo $newmessage
-        echo $newmessage1
-        # curl -G "https://f.w9.work/api/SendWeiXinMessage?code=${{inputs.weixin}}" --data-urlencode "text=${newmessage1}"
+        curl -G "https://f.w9.work/api/SendWeiXinMessage?code=${{inputs.weixin}}" --data-urlencode "text=${newmessage1}"
 
       shell: bash
