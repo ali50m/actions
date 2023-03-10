@@ -3,7 +3,7 @@ description: "record begin time"
 outputs:
   now:
     description: "begin time"
-    value: ${{ steps.record.outputs.now }} ${{ steps.recordWindows.outputs.now }}
+    value: ${{ steps.record.outputs.now }} ${{ steps.recordWindows.outputs.now }} ${{ steps.recordMac.outputs.now }}
 runs:
   using: "composite"
   steps:
@@ -13,9 +13,17 @@ runs:
         export now="$(TZ=Asia/Shanghai date +%H:%M:%S@%Y-%m-%d)"
         echo "now=${now}" >> $GITHUB_OUTPUT
       shell: bash
+      
     - id: recordWindows
       if: runner.os == 'Windows'
       run: |
         $now = [TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, [TimeZoneInfo]::FindSystemTimeZoneById("China Standard Time")).ToString("HH:mm:ss@yyyy-MM-dd", $null)
         echo "now=${now}" >> $Env:GITHUB_OUTPUT
       shell: pwsh
+      
+    - id: recordMac
+      if: runner.os == 'macOS'
+      run: |
+        export now="$(TZ=Asia/Shanghai date +%H:%M:%S@%Y-%m-%d)"
+        echo "now=${now}" >> $GITHUB_OUTPUT
+      shell: bash
