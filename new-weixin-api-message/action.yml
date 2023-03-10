@@ -30,6 +30,6 @@ runs:
         END
         )
         # echo $message
-        curl -G "https://f.w9.work/api/SendWeiXinMessage?code=${{inputs.weixin}}" --data-urlencode "text=${newmessage1}"
+        curl -G "https://f.w9.work/api/SendWeiXinMessage?code=${{inputs.weixin}}" --data-urlencode "text=${message}"
 
       shell: bash
