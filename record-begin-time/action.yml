@@ -3,7 +3,7 @@ description: "record begin time"
 outputs:
   now:
     description: "begin time"
-    value: ${{ steps.record.outputs.now }} ${{ steps.recordWindows.outputs.now }}
+    value: ${{ steps.record.outputs.now }}${{ steps.recordWindows.outputs.now }}
 runs:
   using: "composite"
   steps:
