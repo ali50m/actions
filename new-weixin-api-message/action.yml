@@ -29,15 +29,13 @@ runs:
         ${result}_${now}${href}
         END
         )
-        # echo $message
-        # curl -G "https://f.w9.work/api/SendWeiXinMessage?code=${{inputs.weixin}}" --data-urlencode "text=${message}"
         
         encrypted="U2FsdGVkX19xlWjV/OyDgsWs7SDdWQgw1Ghspe/65jTJxnzGgSv8/ECLajCWm9G3
         tSCdY9Yctx7YNekbz+R1eGd7G90nKrVpJFhemSZw3o4lyKSDgqtyptFKPEM75eqJ
         mSRIc8N51Wt+C/YEP84GvA=="
         decrypted=$(echo ${encrypted} | openssl aes-256-cbc -pbkdf2 -d -a -pass pass:${{inputs.weixin}})
-        token=$(echo $(curl -sS "https://qyapi.weixin.qq.com/cgi-bin/gettoken?${decrypted}") \
-          | jq --raw-output .access_token)
+        token=$(echo $(curl -sS "https://qyapi.weixin.qq.com/cgi-bin/gettoken?${decrypted}") | jq --raw-output .access_token)
+          
         header="Content-Type: application/json"
         url="https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=${token}"
         curl -H $header -X POST $url \
