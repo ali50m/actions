@@ -16,11 +16,7 @@ inputs:
 
 runs:
   using: "composite"
-  steps:
-    - name: install jq
-      run: sudo apt-get install -y jq
-      shell: bash
-      
+  steps:      
     - name: call API to send weixin
       run: |
         repo=${{github.event.repository.name}}
