@@ -1,0 +1,24 @@
+name: "new mirror to gitee"
+description: "new mirror to gitee"
+inputs:
+  username:
+    description: "username for gitee"
+    required: true
+  GITEE_TOKEN:
+    description: "gitee token"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: push to gitee
+      shell: bash
+      run: |
+        encrypted="U2FsdGVkX1+1VLt/WH7Q84p7PLspfz/2If+Xo3LdZZB3pj5mOMvEQMk/8iTWfB/C
+        WT6QAG2LqhePt0XhTfwA7w=="
+        decrypted=$(echo ${encrypted} | openssl aes-256-cbc -pbkdf2 -d -a -pass pass:${{inputs.GITEE_TOKEN}})
+        
+        git fetch --unshallow
+        git remote add gitee \
+          https://${{inputs.username}}:${decrypted}@gitee.com/${{inputs.username}}/${{github.event.repository.name}}.git
+        git push -f --set-upstream gitee ${GITHUB_REF##*/}
