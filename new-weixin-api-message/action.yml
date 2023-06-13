@@ -71,7 +71,7 @@ runs:
             "touser" = "$env:GITHUB_ACTOR"
             "msgtype" = "text"
             "agentid" = "1000002"
-            "text = @{
+            "text" = @{
                 "content" = "$message"
             }
         } | ConvertTo-Json
