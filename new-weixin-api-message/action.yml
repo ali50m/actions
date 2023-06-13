@@ -27,7 +27,8 @@ runs:
         now=${{inputs.now}}
         href="${{inputs.href}}"
         message=$(cat <<-END
-        ${repo}/${ref}${result}_${now}${href}
+        ${repo}/${ref}
+        ${result}_${now}${href}
         END
         )
         echo "message=${message}"
