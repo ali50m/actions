@@ -54,15 +54,7 @@ runs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        $env:repo = "${{github.event.repository.name}}"
-        Write-Host "$env:repo"
-        $env:ref = "${GITHUB_REF##*/}"
-        Write-Host "$env:ref"
-     
-        # 获取完整的Git引用
-        $ref = $env:GITHUB_REF
-        # 从引用中提取分支名称
-        $branchName = Split-Path -Leaf $ref
-        # 将分支名称存储在环境变量中
-        Write-Host "Current branch: $branchName"
-        $env:BRANCH_NAME = $branchName
+        $repo = "${{github.event.repository.name}}"
+        Write-Host $repo
+        $ref = Split-Path -Leaf $env:GITHUB_REF
+        Write-Host $ref
