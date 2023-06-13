@@ -46,7 +46,7 @@ runs:
           "msgtype": "text",
           "agentid": "1000002",
           "text": {
-            "content": "\u2705"
+            "content": "'"${message}"'"
           }
         }'
         echo "body=${body}"
