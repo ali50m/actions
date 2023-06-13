@@ -18,7 +18,7 @@ runs:
   using: "composite"
   steps:
     - name: send weixin in bash
-      if: runner.os == 'Linux' || runner.os == 'macOS'
+      # if: runner.os == 'Linux' || runner.os == 'macOS'
       shell: bash
       run: |
         repo=${{github.event.repository.name}}
@@ -31,6 +31,7 @@ runs:
         ${result}_${now}${href}
         END
         )
+        echo "message=${message}"
         
         encrypted="U2FsdGVkX19xlWjV/OyDgsWs7SDdWQgw1Ghspe/65jTJxnzGgSv8/ECLajCWm9G3
         tSCdY9Yctx7YNekbz+R1eGd7G90nKrVpJFhemSZw3o4lyKSDgqtyptFKPEM75eqJ
@@ -50,29 +51,27 @@ runs:
           }
         }'
     
-    - name: send weixin in windows
-      if: runner.os == 'Windows'
-      shell: pwsh
-      run: |
-        $repo = $env:GITHUB_REPOSITORY.Split("/")[-1]
-        $ref = $env:GITHUB_REF.Split("/")[-1]
-        $result = $args[0]
-        $now = $args[1]
-        $href = $args[2]
-        $message = "$repo/$ref`n$result`_$now$href"
-
-        $encrypted = "U2FsdGVkX19xlWjV/OyDgsWs7SDdWQgw1Ghspe/65jTJxnzGgSv8/ECLajCWm9G3tSCdY9Yctx7YNekbz+R1eGd7G90nKrVpJFhemSZw3o4lyKSDgqtyptFKPEM75eqJmSRIc8N51Wt+C/YEP84GvA=="
-        $decrypted = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encrypted))
-        $token = (Invoke-RestMethod -Uri "https://qyapi.weixin.qq.com/cgi-bin/gettoken?$decrypted" -Method Get).access_token
-
-        $header = "Content-Type: application/json"
-        $url = "https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=$token"
-        $body = @{
-            "touser" = "$env:GITHUB_ACTOR"
-            "msgtype" = "text"
-            "agentid" = "1000002"
-            "text" = @{
-                "content" = "$message"
-            }
-        } | ConvertTo-Json
-        curl -X POST -H $header -d $body $url
+    # - name: send weixin in windows
+    #   if: runner.os == 'Windows'
+    #   shell: bash
+    #   run: |
+    #     repo=${{github.event.repository.name}}
+    #     ref=${GITHUB_REF##*/}
+    #     result=${{inputs.result}}
+    #     now=${{inputs.now}}
+    #     href="${{inputs.href}}"
+    #     message=$(cat <<-END
+    #     ${repo}/${ref}
+    #     ${result}_${now}${href}
+    #     END
+    #     )
+        
+    #     encrypted="U2FsdGVkX19xlWjV/OyDgsWs7SDdWQgw1Ghspe/65jTJxnzGgSv8/ECLajCWm9G3
+    #     tSCdY9Yctx7YNekbz+R1eGd7G90nKrVpJFhemSZw3o4lyKSDgqtyptFKPEM75eqJ
+    #     mSRIc8N51Wt+C/YEP84GvA=="
+    #     decrypted=$(echo ${encrypted} | openssl aes-256-cbc -pbkdf2 -d -a -pass pass:${{inputs.weixin}})
+    #     token=$(echo $(curl -sS "https://qyapi.weixin.qq.com/cgi-bin/gettoken?${decrypted}") | jq --raw-output .access_token)
+          
+    #     header="Content-Type: application/json"
+    #     url="https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=${token}"
+    #     curl -X POST -H ${header} -d ${body} ${url}
