@@ -19,6 +19,7 @@ runs:
   steps:
     - name: send weixin in bash
       if: runner.os == 'Linux' || runner.os == 'macOS'
+      shell: bash
       run: |
         repo=${{github.event.repository.name}}
         ref=${GITHUB_REF##*/}
@@ -51,6 +52,7 @@ runs:
     
     - name: send weixin in windows
       if: runner.os == 'Windows'
+      shell: pwsh
       run: |
         $repo = $env:GITHUB_REPOSITORY.Split("/")[-1]
         $ref = $env:GITHUB_REF.Split("/")[-1]
@@ -58,11 +60,11 @@ runs:
         $now = $args[1]
         $href = $args[2]
         $message = "$repo/$ref`n$result`_$now$href"
-        
+
         $encrypted = "U2FsdGVkX19xlWjV/OyDgsWs7SDdWQgw1Ghspe/65jTJxnzGgSv8/ECLajCWm9G3tSCdY9Yctx7YNekbz+R1eGd7G90nKrVpJFhemSZw3o4lyKSDgqtyptFKPEM75eqJmSRIc8N51Wt+C/YEP84GvA=="
         $decrypted = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encrypted))
         $token = (Invoke-RestMethod -Uri "https://qyapi.weixin.qq.com/cgi-bin/gettoken?$decrypted" -Method Get).access_token
-        
+
         $header = @{ "Content-Type" = "application/json" }
         $url = "https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=$token"
         $body = @{

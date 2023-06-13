@@ -9,14 +9,14 @@ runs:
   steps:
     - id: record
       if: runner.os == 'Linux' || runner.os == 'macOS'
+      shell: bash
       run: |
         now="$(TZ=Asia/Shanghai date +%H:%M:%S@%Y-%m-%d)"
         echo "now=${now}" >> $GITHUB_OUTPUT
-      shell: bash
       
     - id: recordWindows
       if: runner.os == 'Windows'
+      shell: pwsh
       run: |
         $now = [TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, [TimeZoneInfo]::FindSystemTimeZoneById("China Standard Time")).ToString("HH:mm:ss@yyyy-MM-dd", $null)
         echo "now=${now}" >> $Env:GITHUB_OUTPUT
-      shell: pwsh
