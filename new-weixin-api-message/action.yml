@@ -84,6 +84,6 @@ runs:
         Write-Host $repo
         $ref = Split-Path -Leaf $env:GITHUB_REF
         Write-Host $ref
-        Write-Host "${{ steps.decrypted.outputs.url }}"
-        Write-Host "${{ steps.decrypted.outputs.header }}"
-        Write-Host "${{ steps.decrypted.outputs.message }}"
+        # Write-Host "${{ steps.decrypted.outputs.url }}"
+        # Write-Host "${{ steps.decrypted.outputs.header }}"
+        # Write-Host "${{ steps.decrypted.outputs.message }}"
