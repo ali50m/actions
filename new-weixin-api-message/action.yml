@@ -50,7 +50,7 @@ runs:
           }
         }'
         echo "body=${body}"
-        curl -X POST -H ${header} -d ${body} ${url}
+        curl -X POST -H "${header}"" -d "${body}" "${url}"
     
     # - name: send weixin in windows
     #   if: runner.os == 'Windows'
