@@ -56,3 +56,5 @@ runs:
       run: |
         $env:repo = "${{github.event.repository.name}}"
         Write-Host "$env:repo"
+        $env:ref = "${GITHUB_REF##*/}"
+        Write-Host "$env:ref"
