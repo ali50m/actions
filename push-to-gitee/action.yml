@@ -1,0 +1,23 @@
+name: "push to gitee"
+description: "push to gitee"
+inputs:
+  username:
+    description: "username for gitee"
+    required: true
+  GITEE_SSH_KEY:
+    description: "gitee ssh private key"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: push to gitee
+      run: |
+        git fetch --unshallow
+        git remote add gitee git@gitee.com:${{ inputs.username }}/${{ github.event.repository.name }}.git
+        mkdir -p ~/.ssh
+        echo "${{ inputs.GITEE_SSH_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan gitee.com >> ~/.ssh/known_hosts
+        git push --force --set-upstream gitee ${GITHUB_REF##*/}
+      shell: bash
