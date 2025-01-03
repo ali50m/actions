@@ -1,8 +1,14 @@
 name: "my-check-out"
 description: "my proxy of calling actions/checkout"
+inputs:
+  path:
+    description: "path to checkout"
+    required: false
 
 runs:
   using: "composite"
   steps:
     - name: check out with v4
       uses: actions/checkout@v4
+      with:
+        path: ${{ inputs.path }}
