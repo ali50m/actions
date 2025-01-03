@@ -4,5 +4,5 @@ description: "my proxy of calling actions/checkout"
 runs:
   using: "composite"
   steps:
-    - name: check out with v3
-      uses: actions/checkout@v3
+    - name: check out with v4
+      uses: actions/checkout@v4
