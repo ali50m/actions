@@ -65,15 +65,11 @@ runs:
         "@.Trim()
         
         $encrypted = "U2FsdGVkX19xlWjV/OyDgsWs7SDdWQgw1Ghspe/65jTJxnzGgSv8/ECLajCWm9G3tSCdY9Yctx7YNekbz+R1eGd7G90nKrVpJFhemSZw3o4lyKSDgqtyptFKPEM75eqJmSRIc8N51Wt+C/YEP84GvA=="
-        
-        # 使用OpenSSL解密
         $decrypted = $encrypted | openssl aes-256-cbc -pbkdf2 -d -a -pass pass:"${{inputs.weixin}}"
         
-        # 获取access token
         $tokenResponse = Invoke-RestMethod -Uri "https://qyapi.weixin.qq.com/cgi-bin/gettoken?$decrypted" -Method Get
         $token = $tokenResponse.access_token
         
-        # 发送消息
         $url = "https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=$token"
         $body = @{
           touser = "${{github.actor}}"
