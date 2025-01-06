@@ -1,5 +1,5 @@
 name: "send weixin api message"
-description: "send weixin api message on Linux"
+description: "send weixin api message on Linux and Windows"
 inputs:
   weixin:
     description: "credential to call weixin API"
@@ -17,7 +17,7 @@ inputs:
 runs:
   using: "composite"
   steps:      
-    - name: call API to send weixin
+    - name: call API to send weixin (Linux)
       if: runner.os == 'Linux'
       shell: bash
       run: |
@@ -49,3 +49,49 @@ runs:
             "content" : "'"${message}"'"
           }
         }'
+        
+    - name: call API to send weixin (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $repo = "${{github.event.repository.name}}"
+        $ref = $env:GITHUB_REF -replace '.*/'
+        $result = "${{inputs.result}}"
+        $now = "${{inputs.now}}"
+        $href = "${{inputs.href}}"
+        $message = @"
+        $repo/$ref
+        $result`_$now$href
+        "@.Trim()
+        
+        $encrypted = "U2FsdGVkX19xlWjV/OyDgsWs7SDdWQgw1Ghspe/65jTJxnzGgSv8/ECLajCWm9G3tSCdY9Yctx7YNekbz+R1eGd7G90nKrVpJFhemSZw3o4lyKSDgqtyptFKPEM75eqJmSRIc8N51Wt+C/YEP84GvA=="
+        
+        # 使用OpenSSL解密
+        $decrypted = $encrypted | openssl aes-256-cbc -pbkdf2 -d -a -pass pass:"${{inputs.weixin}}"
+        
+        # 获取access token
+        $tokenResponse = Invoke-RestMethod -Uri "https://qyapi.weixin.qq.com/cgi-bin/gettoken?$decrypted" -Method Get
+        $token = $tokenResponse.access_token
+        
+        # 发送消息
+        $url = "https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=$token"
+        $body = @{
+          touser = "${{github.actor}}"
+          msgtype = "text"
+          agentid = 1000002
+          text = @{
+            content = $message
+          }
+        } | ConvertTo-Json -Compress
+        
+        try {
+          $response = Invoke-RestMethod -Uri $url -Method Post -Headers @{"Content-Type" = "application/json"} -Body $body
+          if ($response.errcode -ne 0) {
+            Write-Error "发送消息失败: $($response.errmsg)"
+            exit 1
+          }
+        }
+        catch {
+          Write-Error "请求失败: $_"
+          exit 1
+        }
