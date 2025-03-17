@@ -74,6 +74,40 @@ runs:
         echo "Key file size: $(wc -c < ~/.ssh/id_key) bytes"
         echo "Key file first line: $(head -n 1 ~/.ssh/id_key | sed 's/\(.\{10\}\).*/\1.../')"
         
+        # Try to extract public key from private key
+        echo "Attempting to extract public key..."
+        if ! ssh-keygen -y -f ~/.ssh/id_key > ~/.ssh/id_key.pub 2>/dev/null; then
+          echo "Warning: Could not extract public key from private key"
+          
+          # Try to fix key format issues
+          echo "Attempting to fix key format..."
+          
+          # Check if key is base64 encoded
+          if ! grep -q "BEGIN" ~/.ssh/id_key; then
+            echo "Key doesn't appear to be in PEM format, trying base64 decode..."
+            cat ~/.ssh/id_key | base64 -d > ~/.ssh/id_key.tmp 2>/dev/null && mv ~/.ssh/id_key.tmp ~/.ssh/id_key
+            chmod 600 ~/.ssh/id_key
+          fi
+          
+          # Try to extract public key again
+          if ! ssh-keygen -y -f ~/.ssh/id_key > ~/.ssh/id_key.pub 2>/dev/null; then
+            echo "Still unable to extract public key. Generating a new key pair..."
+            
+            # Generate a new key pair
+            ssh-keygen -t ed25519 -f ~/.ssh/temp_key -N "" -C "github-action-temp-key"
+            
+            # Display the public key for manual addition to authorized_keys
+            echo "============================================================="
+            echo "IMPORTANT: Add this public key to your server's authorized_keys:"
+            cat ~/.ssh/temp_key.pub
+            echo "============================================================="
+            echo "Then try running this action again."
+            echo "If you can't add the key manually, you need to fix your SSH key format."
+            
+            exit 1
+          fi
+        fi
+        
         # Create a minimal SSH config file
         cat > ~/.ssh/config << 'EOL'
         Host *
@@ -117,6 +151,11 @@ runs:
           # Try with StrictHostKeyChecking=no for debugging
           echo "Trying connection with StrictHostKeyChecking=no (for debugging only):"
           ssh -v -i ~/.ssh/id_key -o StrictHostKeyChecking=no -p ${{ inputs.remote_port }} ${{ inputs.remote_user }}@${{ inputs.remote_host }} exit 2>&1 || true
+          
+          echo "============================================================="
+          echo "IMPORTANT: Verify that the public key is in authorized_keys on the server."
+          echo "Public key fingerprint: $(ssh-keygen -l -f ~/.ssh/id_key.pub 2>/dev/null || echo 'Could not generate fingerprint')"
+          echo "============================================================="
           
           exit 1
         fi
