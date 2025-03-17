@@ -34,7 +34,6 @@ runs:
           echo "Cleaning up..."
           git remote remove destination 2>/dev/null || true
           rm -f ~/.ssh/id_key ~/.ssh/config ~/.ssh/known_hosts
-          ssh-agent -k 2>/dev/null || true
         }
         
         trap cleanup EXIT  # Ensure cleanup runs on exit
@@ -67,72 +66,20 @@ runs:
         mkdir -p ~/.ssh
         chmod 700 ~/.ssh
         
-        # Write SSH key to a generic file name (not assuming ed25519)
-        echo "${{ inputs.ssh_key }}" | tr -d '\r' > ~/.ssh/id_key
+        # Write SSH key to file
+        echo "${{ inputs.ssh_key }}" > ~/.ssh/id_key
         chmod 600 ~/.ssh/id_key
-        
-        # Detect key type
-        KEY_TYPE="unknown"
-        if grep -q "BEGIN OPENSSH PRIVATE KEY" ~/.ssh/id_key; then
-          KEY_TYPE="openssh"
-          echo "Detected OpenSSH format key"
-        elif grep -q "BEGIN RSA PRIVATE KEY" ~/.ssh/id_key; then
-          KEY_TYPE="rsa"
-          echo "Detected RSA format key"
-        elif grep -q "BEGIN EC PRIVATE KEY" ~/.ssh/id_key; then
-          KEY_TYPE="ec"
-          echo "Detected EC format key"
-        elif grep -q "BEGIN PRIVATE KEY" ~/.ssh/id_key; then
-          KEY_TYPE="pkcs8"
-          echo "Detected PKCS8 format key"
-        else
-          echo "Unknown key format, will try to use as-is"
-        fi
         
         # Display key info for debugging (without showing the actual key)
         echo "Key file size: $(wc -c < ~/.ssh/id_key) bytes"
         echo "Key file first line: $(head -n 1 ~/.ssh/id_key | sed 's/\(.\{10\}\).*/\1.../')"
         
-        # Start ssh-agent
-        echo "Starting ssh-agent..."
-        eval "$(ssh-agent -s)"
-        
-        # Try to add the key to ssh-agent
-        echo "Adding key to ssh-agent..."
-        if ! ssh-add ~/.ssh/id_key 2>/dev/null; then
-          echo "Warning: Failed to add key directly to ssh-agent"
-          echo "Trying to convert key format..."
-          
-          # Create a temporary key for conversion
-          cp ~/.ssh/id_key ~/.ssh/temp_key
-          
-          # Try different conversion approaches
-          if [[ "$KEY_TYPE" == "rsa" || "$KEY_TYPE" == "pkcs8" || "$KEY_TYPE" == "ec" ]]; then
-            echo "Converting PEM format to OpenSSH format..."
-            ssh-keygen -p -N "" -m PEM -f ~/.ssh/temp_key
-          fi
-          
-          # Try to add the converted key
-          if ! ssh-add ~/.ssh/temp_key 2>/dev/null; then
-            echo "Error: Failed to add key to ssh-agent after conversion"
-            rm -f ~/.ssh/temp_key
-            exit 1
-          fi
-          
-          # If successful, replace the original key
-          mv ~/.ssh/temp_key ~/.ssh/id_key
-          echo "Successfully converted and added key to ssh-agent"
-        fi
-        
-        # Create SSH config file with more secure defaults
+        # Create a minimal SSH config file
         cat > ~/.ssh/config << 'EOL'
         Host *
             StrictHostKeyChecking yes
-            IdentityFile ~/.ssh/id_key
             IdentitiesOnly yes
             BatchMode yes
-            Port ${port}
-            User ${user}
         EOL
         chmod 600 ~/.ssh/config
         
@@ -145,23 +92,12 @@ runs:
         
         # Test SSH connection with more verbose output
         echo "Testing SSH connection..."
-        if ! ssh -v \
-          -o StrictHostKeyChecking=yes \
-          -o IdentitiesOnly=yes \
-          -o BatchMode=yes \
-          -p ${{ inputs.remote_port }} \
-          ${{ inputs.remote_user }}@${{ inputs.remote_host }} exit 2>&1; then
-          
+        if ! ssh -v -i ~/.ssh/id_key -p ${{ inputs.remote_port }} ${{ inputs.remote_user }}@${{ inputs.remote_host }} exit 2>&1; then
           echo "Error: Failed to establish SSH connection"
           echo "Trying to diagnose the issue..."
           
-          # Try to get key fingerprint
           echo "Checking SSH key fingerprint:"
           ssh-keygen -l -f ~/.ssh/id_key || true
-          
-          # Check ssh-agent status
-          echo "Checking ssh-agent status:"
-          ssh-add -l || true
           
           echo "Checking SSH version and configuration:"
           ssh -V
@@ -169,18 +105,23 @@ runs:
           echo "Checking known_hosts content:"
           cat ~/.ssh/known_hosts || true
           
-          # Try with debug flags
-          echo "Trying connection with debug flags:"
-          SSH_AUTH_SOCK=$SSH_AUTH_SOCK ssh -vvv \
-            -o StrictHostKeyChecking=yes \
-            -o IdentitiesOnly=yes \
-            -o BatchMode=yes \
-            -p ${{ inputs.remote_port }} \
-            ${{ inputs.remote_user }}@${{ inputs.remote_host }} exit 2>&1 || true
+          # Try with a different key format
+          echo "Trying to convert key format..."
+          cp ~/.ssh/id_key ~/.ssh/temp_key
+          ssh-keygen -p -N "" -f ~/.ssh/temp_key || true
+          
+          echo "Trying connection with converted key:"
+          ssh -v -i ~/.ssh/temp_key -p ${{ inputs.remote_port }} ${{ inputs.remote_user }}@${{ inputs.remote_host }} exit 2>&1 || true
+          rm -f ~/.ssh/temp_key
+          
+          # Try with StrictHostKeyChecking=no for debugging
+          echo "Trying connection with StrictHostKeyChecking=no (for debugging only):"
+          ssh -v -i ~/.ssh/id_key -o StrictHostKeyChecking=no -p ${{ inputs.remote_port }} ${{ inputs.remote_user }}@${{ inputs.remote_host }} exit 2>&1 || true
           
           exit 1
         fi
         
+        # Use a URL format that works with the SSH command line options
         REMOTE_URL="ssh://${{ inputs.remote_user }}@${{ inputs.remote_host }}:${{ inputs.remote_port }}${{ inputs.remote_path }}"
         BRANCH="${{ inputs.branch }}"
         
@@ -192,7 +133,7 @@ runs:
         
         echo "Pushing to remote repository (branch: ${BRANCH})..."
         # Use GIT_SSH_COMMAND to ensure git uses the correct SSH configuration
-        GIT_SSH_COMMAND="ssh -v -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -p ${{ inputs.remote_port }}" \
+        GIT_SSH_COMMAND="ssh -v -i ~/.ssh/id_key -p ${{ inputs.remote_port }}" \
         git push destination "${BRANCH}" || {
           echo "Error: Failed to push to remote repository"
           exit 1
