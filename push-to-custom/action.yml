@@ -33,7 +33,7 @@ runs:
         cleanup() {
           echo "Cleaning up..."
           git remote remove destination 2>/dev/null || true
-          rm -f ~/.ssh/id_key ~/.ssh/config ~/.ssh/known_hosts
+          rm -f ~/.ssh/id_key ~/.ssh/id_key.pub ~/.ssh/config ~/.ssh/known_hosts
         }
         
         trap cleanup EXIT  # Ensure cleanup runs on exit
@@ -41,14 +41,11 @@ runs:
         echo "Starting push to custom repository action..."
         
         # Validate inputs
-        echo "Validating inputs..."
         if [[ ! "${{ inputs.remote_path }}" =~ ^/ ]]; then
           echo "Error: remote_path must start with /"
           exit 1
         fi
         
-        # Validate port number
-        echo "Validating port number..."
         if ! [[ "${{ inputs.remote_port }}" =~ ^[0-9]+$ ]] || \
            [ "${{ inputs.remote_port }}" -lt 1 ] || \
            [ "${{ inputs.remote_port }}" -gt 65535 ]; then
@@ -56,9 +53,9 @@ runs:
           exit 1
         fi
         
-        echo "Fetching repository history..."
-        # Only do unshallow if repository is shallow
+        # Fetch repository history if needed
         if git rev-parse --is-shallow-repository | grep -q "true"; then
+          echo "Fetching repository history..."
           git fetch --unshallow || true
         fi
         
@@ -70,40 +67,20 @@ runs:
         echo "${{ inputs.ssh_key }}" > ~/.ssh/id_key
         chmod 600 ~/.ssh/id_key
         
-        # Display key info for debugging (without showing the actual key)
-        echo "Key file size: $(wc -c < ~/.ssh/id_key) bytes"
-        echo "Key file first line: $(head -n 1 ~/.ssh/id_key | sed 's/\(.\{10\}\).*/\1.../')"
-        
         # Try to extract public key from private key
-        echo "Attempting to extract public key..."
         if ! ssh-keygen -y -f ~/.ssh/id_key > ~/.ssh/id_key.pub 2>/dev/null; then
           echo "Warning: Could not extract public key from private key"
           
           # Try to fix key format issues
-          echo "Attempting to fix key format..."
-          
-          # Check if key is base64 encoded
           if ! grep -q "BEGIN" ~/.ssh/id_key; then
-            echo "Key doesn't appear to be in PEM format, trying base64 decode..."
+            echo "Attempting to fix key format..."
             cat ~/.ssh/id_key | base64 -d > ~/.ssh/id_key.tmp 2>/dev/null && mv ~/.ssh/id_key.tmp ~/.ssh/id_key
             chmod 600 ~/.ssh/id_key
           fi
           
           # Try to extract public key again
           if ! ssh-keygen -y -f ~/.ssh/id_key > ~/.ssh/id_key.pub 2>/dev/null; then
-            echo "Still unable to extract public key. Generating a new key pair..."
-            
-            # Generate a new key pair
-            ssh-keygen -t ed25519 -f ~/.ssh/temp_key -N "" -C "github-action-temp-key"
-            
-            # Display the public key for manual addition to authorized_keys
-            echo "============================================================="
-            echo "IMPORTANT: Add this public key to your server's authorized_keys:"
-            cat ~/.ssh/temp_key.pub
-            echo "============================================================="
-            echo "Then try running this action again."
-            echo "If you can't add the key manually, you need to fix your SSH key format."
-            
+            echo "Error: Invalid SSH key format. Please provide a valid private key."
             exit 1
           fi
         fi
@@ -117,50 +94,25 @@ runs:
         EOL
         chmod 600 ~/.ssh/config
         
-        echo "Adding remote host to known hosts..."
-        ssh-keyscan -p ${{ inputs.remote_port }} ${{ inputs.remote_host }} >> ~/.ssh/known_hosts || {
+        # Add remote host to known hosts
+        ssh-keyscan -p ${{ inputs.remote_port }} ${{ inputs.remote_host }} >> ~/.ssh/known_hosts 2>/dev/null || {
           echo "Error: Failed to scan remote host key"
           exit 1
         }
         chmod 600 ~/.ssh/known_hosts
         
-        # Test SSH connection with more verbose output
+        # Test SSH connection
         echo "Testing SSH connection..."
-        if ! ssh -v -i ~/.ssh/id_key -p ${{ inputs.remote_port }} ${{ inputs.remote_user }}@${{ inputs.remote_host }} exit 2>&1; then
+        if ! ssh -i ~/.ssh/id_key -p ${{ inputs.remote_port }} ${{ inputs.remote_user }}@${{ inputs.remote_host }} exit 2>/dev/null; then
           echo "Error: Failed to establish SSH connection"
-          echo "Trying to diagnose the issue..."
-          
-          echo "Checking SSH key fingerprint:"
-          ssh-keygen -l -f ~/.ssh/id_key || true
-          
-          echo "Checking SSH version and configuration:"
-          ssh -V
-          
-          echo "Checking known_hosts content:"
-          cat ~/.ssh/known_hosts || true
-          
-          # Try with a different key format
-          echo "Trying to convert key format..."
-          cp ~/.ssh/id_key ~/.ssh/temp_key
-          ssh-keygen -p -N "" -f ~/.ssh/temp_key || true
-          
-          echo "Trying connection with converted key:"
-          ssh -v -i ~/.ssh/temp_key -p ${{ inputs.remote_port }} ${{ inputs.remote_user }}@${{ inputs.remote_host }} exit 2>&1 || true
-          rm -f ~/.ssh/temp_key
-          
-          # Try with StrictHostKeyChecking=no for debugging
-          echo "Trying connection with StrictHostKeyChecking=no (for debugging only):"
-          ssh -v -i ~/.ssh/id_key -o StrictHostKeyChecking=no -p ${{ inputs.remote_port }} ${{ inputs.remote_user }}@${{ inputs.remote_host }} exit 2>&1 || true
-          
-          echo "============================================================="
-          echo "IMPORTANT: Verify that the public key is in authorized_keys on the server."
-          echo "Public key fingerprint: $(ssh-keygen -l -f ~/.ssh/id_key.pub 2>/dev/null || echo 'Could not generate fingerprint')"
-          echo "============================================================="
-          
+          echo "Please verify that:"
+          echo "1. The SSH key is valid"
+          echo "2. The public key is in authorized_keys on the server"
+          echo "3. The server allows SSH connections on port ${{ inputs.remote_port }}"
           exit 1
         fi
         
-        # Use a URL format that works with the SSH command line options
+        # Set up git remote and push
         REMOTE_URL="ssh://${{ inputs.remote_user }}@${{ inputs.remote_host }}:${{ inputs.remote_port }}${{ inputs.remote_path }}"
         BRANCH="${{ inputs.branch }}"
         
@@ -171,8 +123,7 @@ runs:
         }
         
         echo "Pushing to remote repository (branch: ${BRANCH})..."
-        # Use GIT_SSH_COMMAND to ensure git uses the correct SSH configuration
-        GIT_SSH_COMMAND="ssh -v -i ~/.ssh/id_key -p ${{ inputs.remote_port }}" \
+        GIT_SSH_COMMAND="ssh -i ~/.ssh/id_key -p ${{ inputs.remote_port }}" \
         git push destination "${BRANCH}" || {
           echo "Error: Failed to push to remote repository"
           exit 1
