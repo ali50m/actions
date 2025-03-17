@@ -1,5 +1,6 @@
 name: "push to custom repo"
 description: "push to custom git repository"
+
 inputs:
   remote_user:
     description: "remote username"
@@ -32,7 +33,9 @@ runs:
         
         # Validate port number
         echo "Validating port number..."
-        if ! [[ "${{ inputs.remote_port }}" =~ ^[0-9]+$ ]] || [ "${{ inputs.remote_port }}" -lt 1 ] || [ "${{ inputs.remote_port }}" -gt 65535 ]; then
+        if ! [[ "${{ inputs.remote_port }}" =~ ^[0-9]+$ ]] || \
+           [ "${{ inputs.remote_port }}" -lt 1 ] || \
+           [ "${{ inputs.remote_port }}" -gt 65535 ]; then
           echo "Error: Invalid port number"
           exit 1
         fi
@@ -62,13 +65,33 @@ runs:
           exit 1
         }
         
-        # Test SSH connection
+        # Test SSH connection with more verbose output
         echo "Testing SSH connection..."
-        if ! ssh -p ${{ inputs.remote_port }} -o BatchMode=yes -o StrictHostKeyChecking=yes ${{ inputs.remote_user }}@${{ inputs.remote_host }} exit 2>/dev/null; then
+        ssh -v -p ${{ inputs.remote_port }} \
+          -o BatchMode=yes \
+          -o StrictHostKeyChecking=yes \
+          ${{ inputs.remote_user }}@${{ inputs.remote_host }} exit 2>&1 || {
           echo "Error: Failed to establish SSH connection"
+          echo "Trying to diagnose the issue..."
+          
+          # 检查SSH密钥
+          echo "Checking SSH key fingerprint:"
+          ssh-keygen -l -f ~/.ssh/id_rsa || true
+          
+          # 检查known_hosts
+          echo "Checking known_hosts content:"
+          cat ~/.ssh/known_hosts || true
+          
+          # 尝试不带StrictHostKeyChecking的连接
+          echo "Trying connection without strict host checking..."
+          ssh -v -p ${{ inputs.remote_port }} \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=no \
+            ${{ inputs.remote_user }}@${{ inputs.remote_host }} exit 2>&1 || true
+          
           rm -f ~/.ssh/id_rsa
           exit 1
-        fi
+        }
         
         REMOTE_URL="ssh://${{ inputs.remote_user }}@${{ inputs.remote_host }}:${{ inputs.remote_port }}${{ inputs.remote_path }}"
         BRANCH="${{ inputs.branch }}"
