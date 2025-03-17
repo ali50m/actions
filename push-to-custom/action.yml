@@ -15,7 +15,7 @@ inputs:
     description: "remote repository path"
     required: true
   ssh_key:
-    description: "ssh private key"
+    description: "ssh private key (supports ed25519)"
     required: true
   branch:
     description: "branch to push (defaults to current branch)"
@@ -46,50 +46,49 @@ runs:
         echo "Setting up SSH configuration..."
         mkdir -p ~/.ssh
         chmod 700 ~/.ssh
-        echo "${{ inputs.ssh_key }}" > ~/.ssh/id_rsa
+        echo "${{ inputs.ssh_key }}" > ~/.ssh/id_ed25519
         
         # Validate SSH key format
         echo "Validating SSH key format..."
-        if ! ssh-keygen -l -f ~/.ssh/id_rsa &>/dev/null; then
+        if ! ssh-keygen -l -f ~/.ssh/id_ed25519 &>/dev/null; then
           echo "Error: Invalid SSH private key format"
-          rm -f ~/.ssh/id_rsa
+          rm -f ~/.ssh/id_ed25519
           exit 1
         fi
         
-        chmod 600 ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_ed25519
         
         echo "Adding remote host to known hosts..."
         ssh-keyscan -p ${{ inputs.remote_port }} ${{ inputs.remote_host }} >> ~/.ssh/known_hosts || {
           echo "Error: Failed to scan remote host key"
-          rm -f ~/.ssh/id_rsa
+          rm -f ~/.ssh/id_ed25519
           exit 1
         }
         
         # Test SSH connection with more verbose output
         echo "Testing SSH connection..."
         ssh -v -p ${{ inputs.remote_port }} \
+          -i ~/.ssh/id_ed25519 \
           -o BatchMode=yes \
           -o StrictHostKeyChecking=yes \
           ${{ inputs.remote_user }}@${{ inputs.remote_host }} exit 2>&1 || {
           echo "Error: Failed to establish SSH connection"
           echo "Trying to diagnose the issue..."
           
-          # 检查SSH密钥
           echo "Checking SSH key fingerprint:"
-          ssh-keygen -l -f ~/.ssh/id_rsa || true
+          ssh-keygen -l -f ~/.ssh/id_ed25519 || true
           
-          # 检查known_hosts
           echo "Checking known_hosts content:"
           cat ~/.ssh/known_hosts || true
           
-          # 尝试不带StrictHostKeyChecking的连接
           echo "Trying connection without strict host checking..."
           ssh -v -p ${{ inputs.remote_port }} \
+            -i ~/.ssh/id_ed25519 \
             -o BatchMode=yes \
             -o StrictHostKeyChecking=no \
             ${{ inputs.remote_user }}@${{ inputs.remote_host }} exit 2>&1 || true
           
-          rm -f ~/.ssh/id_rsa
+          rm -f ~/.ssh/id_ed25519
           exit 1
         }
         
@@ -99,7 +98,7 @@ runs:
         echo "Adding git remote..."
         git remote add destination "${REMOTE_URL}" || {
           echo "Error: Failed to add git remote"
-          rm -f ~/.ssh/id_rsa
+          rm -f ~/.ssh/id_ed25519
           exit 1
         }
         
@@ -107,14 +106,14 @@ runs:
         git push destination "${BRANCH}" || {
           echo "Error: Failed to push to remote repository"
           git remote remove destination
-          rm -f ~/.ssh/id_rsa
+          rm -f ~/.ssh/id_ed25519
           exit 1
         }
         
         # Clean up
         echo "Cleaning up..."
         git remote remove destination || true
-        rm -f ~/.ssh/id_rsa
+        rm -f ~/.ssh/id_ed25519
         
         echo "Successfully pushed to custom repository"
       shell: bash
