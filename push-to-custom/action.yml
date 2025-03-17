@@ -58,7 +58,7 @@ runs:
         
         echo "Fetching repository history..."
         # Only do unshallow if repository is shallow
-        if git rev-parse --is-shallow-repository &>/dev/null; then
+        if git rev-parse --is-shallow-repository | grep -q "true"; then
           git fetch --unshallow || true
         fi
         
@@ -67,28 +67,56 @@ runs:
         chmod 700 ~/.ssh
         
         # Write SSH key while preserving newlines but removing carriage returns
-        echo -n "${{ inputs.ssh_key }}" | tr -d '\r' > ~/.ssh/id_ed25519
+        # First, save the key to a temporary file to inspect it
+        echo "${{ inputs.ssh_key }}" > ~/.ssh/temp_key
         
-        # Validate SSH key format and content
-        echo "Validating SSH key format..."
-        if ! grep -q "BEGIN OPENSSH PRIVATE KEY" ~/.ssh/id_ed25519; then
-          echo "Error: SSH key must start with '-----BEGIN OPENSSH PRIVATE KEY-----'"
-          exit 1
+        # Check if key is in PEM format (starts with -----BEGIN)
+        if grep -q "BEGIN" ~/.ssh/temp_key; then
+          echo "Detected PEM format key"
+          # Copy as-is but remove carriage returns
+          cat ~/.ssh/temp_key | tr -d '\r' > ~/.ssh/id_ed25519
+        else
+          echo "Key doesn't appear to be in PEM format, trying base64 format"
+          # Try to decode if it's base64 encoded
+          cat ~/.ssh/temp_key | base64 -d > ~/.ssh/id_ed25519 2>/dev/null || {
+            echo "Error: Could not decode key as base64"
+            cat ~/.ssh/temp_key > ~/.ssh/id_ed25519
+          }
         fi
         
-        if ! grep -q "END OPENSSH PRIVATE KEY" ~/.ssh/id_ed25519; then
-          echo "Error: SSH key must end with '-----END OPENSSH PRIVATE KEY-----'"
-          exit 1
-        fi
-        
-        if ! ssh-keygen -l -f ~/.ssh/id_ed25519 &>/dev/null; then
-          echo "Error: Invalid SSH private key format"
-          echo "Please ensure the key is in OpenSSH format and includes all content"
-          exit 1
-        fi
+        # Remove temporary key
+        rm -f ~/.ssh/temp_key
         
         # Set strict permissions
         chmod 600 ~/.ssh/id_ed25519
+        
+        # Validate SSH key format and content
+        echo "Validating SSH key format..."
+        
+        # Display key info for debugging (without showing the actual key)
+        echo "Key file size: $(wc -c < ~/.ssh/id_ed25519) bytes"
+        echo "Key file first line: $(head -n 1 ~/.ssh/id_ed25519 | sed 's/\(.\{10\}\).*/\1.../')"
+        
+        # Try to get key fingerprint
+        if ! ssh-keygen -l -f ~/.ssh/id_ed25519 &>/dev/null; then
+          echo "Warning: Could not get key fingerprint with ssh-keygen"
+          echo "Trying alternative key formats..."
+          
+          # Try to convert key to OpenSSH format if it's not already
+          if grep -q "PRIVATE KEY" ~/.ssh/id_ed25519; then
+            echo "Key appears to be in PEM format, attempting to convert to OpenSSH format"
+            mv ~/.ssh/id_ed25519 ~/.ssh/temp_key
+            ssh-keygen -p -N "" -m PEM -f ~/.ssh/temp_key -q
+            mv ~/.ssh/temp_key ~/.ssh/id_ed25519
+          fi
+          
+          # Try again with the possibly converted key
+          if ! ssh-keygen -l -f ~/.ssh/id_ed25519 &>/dev/null; then
+            echo "Error: SSH key validation failed after conversion attempts"
+            echo "Please ensure you're providing a valid SSH private key"
+            exit 1
+          fi
+        fi
         
         # Create SSH config file with more secure defaults
         cat > ~/.ssh/config << 'EOL'
@@ -115,6 +143,9 @@ runs:
         echo "Testing SSH connection..."
         if ! ssh -v -p ${{ inputs.remote_port }} \
           -i ~/.ssh/id_ed25519 \
+          -o StrictHostKeyChecking=yes \
+          -o IdentitiesOnly=yes \
+          -o BatchMode=yes \
           ${{ inputs.remote_user }}@${{ inputs.remote_host }} exit 2>&1; then
           
           echo "Error: Failed to establish SSH connection"
@@ -123,16 +154,19 @@ runs:
           echo "Checking SSH key fingerprint:"
           ssh-keygen -l -f ~/.ssh/id_ed25519 || true
           
-          echo "Checking if key format is correct:"
-          if ! grep -q "BEGIN OPENSSH PRIVATE KEY" ~/.ssh/id_ed25519; then
-            echo "Key does not start with correct header"
-          fi
-          if ! grep -q "END OPENSSH PRIVATE KEY" ~/.ssh/id_ed25519; then
-            echo "Key does not end with correct footer"
-          fi
+          echo "Checking SSH version and configuration:"
+          ssh -V
           
           echo "Checking known_hosts content:"
           cat ~/.ssh/known_hosts || true
+          
+          echo "Trying connection with StrictHostKeyChecking=no (for debugging only):"
+          ssh -v -p ${{ inputs.remote_port }} \
+            -i ~/.ssh/id_ed25519 \
+            -o StrictHostKeyChecking=no \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            ${{ inputs.remote_user }}@${{ inputs.remote_host }} exit 2>&1 || true
           
           exit 1
         fi
