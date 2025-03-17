@@ -15,7 +15,7 @@ inputs:
     description: "remote repository path (should start with /)"
     required: true
   ssh_key:
-    description: "ssh private key (supports ed25519, keep the newlines in the key)"
+    description: "ssh private key (supports RSA, ED25519, keep the newlines in the key)"
     required: true
   branch:
     description: "branch to push (defaults to current branch)"
@@ -33,7 +33,8 @@ runs:
         cleanup() {
           echo "Cleaning up..."
           git remote remove destination 2>/dev/null || true
-          rm -f ~/.ssh/id_ed25519 ~/.ssh/config ~/.ssh/known_hosts
+          rm -f ~/.ssh/id_key ~/.ssh/config ~/.ssh/known_hosts
+          ssh-agent -k 2>/dev/null || true
         }
         
         trap cleanup EXIT  # Ensure cleanup runs on exit
@@ -66,69 +67,72 @@ runs:
         mkdir -p ~/.ssh
         chmod 700 ~/.ssh
         
-        # Write SSH key while preserving newlines but removing carriage returns
-        # First, save the key to a temporary file to inspect it
-        echo "${{ inputs.ssh_key }}" > ~/.ssh/temp_key
+        # Write SSH key to a generic file name (not assuming ed25519)
+        echo "${{ inputs.ssh_key }}" | tr -d '\r' > ~/.ssh/id_key
+        chmod 600 ~/.ssh/id_key
         
-        # Check if key is in PEM format (starts with -----BEGIN)
-        if grep -q "BEGIN" ~/.ssh/temp_key; then
-          echo "Detected PEM format key"
-          # Copy as-is but remove carriage returns
-          cat ~/.ssh/temp_key | tr -d '\r' > ~/.ssh/id_ed25519
+        # Detect key type
+        KEY_TYPE="unknown"
+        if grep -q "BEGIN OPENSSH PRIVATE KEY" ~/.ssh/id_key; then
+          KEY_TYPE="openssh"
+          echo "Detected OpenSSH format key"
+        elif grep -q "BEGIN RSA PRIVATE KEY" ~/.ssh/id_key; then
+          KEY_TYPE="rsa"
+          echo "Detected RSA format key"
+        elif grep -q "BEGIN EC PRIVATE KEY" ~/.ssh/id_key; then
+          KEY_TYPE="ec"
+          echo "Detected EC format key"
+        elif grep -q "BEGIN PRIVATE KEY" ~/.ssh/id_key; then
+          KEY_TYPE="pkcs8"
+          echo "Detected PKCS8 format key"
         else
-          echo "Key doesn't appear to be in PEM format, trying base64 format"
-          # Try to decode if it's base64 encoded
-          cat ~/.ssh/temp_key | base64 -d > ~/.ssh/id_ed25519 2>/dev/null || {
-            echo "Error: Could not decode key as base64"
-            cat ~/.ssh/temp_key > ~/.ssh/id_ed25519
-          }
+          echo "Unknown key format, will try to use as-is"
         fi
         
-        # Remove temporary key
-        rm -f ~/.ssh/temp_key
-        
-        # Set strict permissions
-        chmod 600 ~/.ssh/id_ed25519
-        
-        # Validate SSH key format and content
-        echo "Validating SSH key format..."
-        
         # Display key info for debugging (without showing the actual key)
-        echo "Key file size: $(wc -c < ~/.ssh/id_ed25519) bytes"
-        echo "Key file first line: $(head -n 1 ~/.ssh/id_ed25519 | sed 's/\(.\{10\}\).*/\1.../')"
+        echo "Key file size: $(wc -c < ~/.ssh/id_key) bytes"
+        echo "Key file first line: $(head -n 1 ~/.ssh/id_key | sed 's/\(.\{10\}\).*/\1.../')"
         
-        # Try to get key fingerprint
-        if ! ssh-keygen -l -f ~/.ssh/id_ed25519 &>/dev/null; then
-          echo "Warning: Could not get key fingerprint with ssh-keygen"
-          echo "Trying alternative key formats..."
+        # Start ssh-agent
+        echo "Starting ssh-agent..."
+        eval "$(ssh-agent -s)"
+        
+        # Try to add the key to ssh-agent
+        echo "Adding key to ssh-agent..."
+        if ! ssh-add ~/.ssh/id_key 2>/dev/null; then
+          echo "Warning: Failed to add key directly to ssh-agent"
+          echo "Trying to convert key format..."
           
-          # Try to convert key to OpenSSH format if it's not already
-          if grep -q "PRIVATE KEY" ~/.ssh/id_ed25519; then
-            echo "Key appears to be in PEM format, attempting to convert to OpenSSH format"
-            mv ~/.ssh/id_ed25519 ~/.ssh/temp_key
-            ssh-keygen -p -N "" -m PEM -f ~/.ssh/temp_key -q
-            mv ~/.ssh/temp_key ~/.ssh/id_ed25519
+          # Create a temporary key for conversion
+          cp ~/.ssh/id_key ~/.ssh/temp_key
+          
+          # Try different conversion approaches
+          if [[ "$KEY_TYPE" == "rsa" || "$KEY_TYPE" == "pkcs8" || "$KEY_TYPE" == "ec" ]]; then
+            echo "Converting PEM format to OpenSSH format..."
+            ssh-keygen -p -N "" -m PEM -f ~/.ssh/temp_key
           fi
           
-          # Try again with the possibly converted key
-          if ! ssh-keygen -l -f ~/.ssh/id_ed25519 &>/dev/null; then
-            echo "Error: SSH key validation failed after conversion attempts"
-            echo "Please ensure you're providing a valid SSH private key"
+          # Try to add the converted key
+          if ! ssh-add ~/.ssh/temp_key 2>/dev/null; then
+            echo "Error: Failed to add key to ssh-agent after conversion"
+            rm -f ~/.ssh/temp_key
             exit 1
           fi
+          
+          # If successful, replace the original key
+          mv ~/.ssh/temp_key ~/.ssh/id_key
+          echo "Successfully converted and added key to ssh-agent"
         fi
         
         # Create SSH config file with more secure defaults
         cat > ~/.ssh/config << 'EOL'
         Host *
             StrictHostKeyChecking yes
-            IdentityFile ~/.ssh/id_ed25519
+            IdentityFile ~/.ssh/id_key
             IdentitiesOnly yes
             BatchMode yes
-            KexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org
-            HostKeyAlgorithms ssh-ed25519,rsa-sha2-512,rsa-sha2-256
-            Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com
-            MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
+            Port ${port}
+            User ${user}
         EOL
         chmod 600 ~/.ssh/config
         
@@ -141,18 +145,23 @@ runs:
         
         # Test SSH connection with more verbose output
         echo "Testing SSH connection..."
-        if ! ssh -v -p ${{ inputs.remote_port }} \
-          -i ~/.ssh/id_ed25519 \
+        if ! ssh -v \
           -o StrictHostKeyChecking=yes \
           -o IdentitiesOnly=yes \
           -o BatchMode=yes \
+          -p ${{ inputs.remote_port }} \
           ${{ inputs.remote_user }}@${{ inputs.remote_host }} exit 2>&1; then
           
           echo "Error: Failed to establish SSH connection"
           echo "Trying to diagnose the issue..."
           
+          # Try to get key fingerprint
           echo "Checking SSH key fingerprint:"
-          ssh-keygen -l -f ~/.ssh/id_ed25519 || true
+          ssh-keygen -l -f ~/.ssh/id_key || true
+          
+          # Check ssh-agent status
+          echo "Checking ssh-agent status:"
+          ssh-add -l || true
           
           echo "Checking SSH version and configuration:"
           ssh -V
@@ -160,12 +169,13 @@ runs:
           echo "Checking known_hosts content:"
           cat ~/.ssh/known_hosts || true
           
-          echo "Trying connection with StrictHostKeyChecking=no (for debugging only):"
-          ssh -v -p ${{ inputs.remote_port }} \
-            -i ~/.ssh/id_ed25519 \
-            -o StrictHostKeyChecking=no \
+          # Try with debug flags
+          echo "Trying connection with debug flags:"
+          SSH_AUTH_SOCK=$SSH_AUTH_SOCK ssh -vvv \
+            -o StrictHostKeyChecking=yes \
             -o IdentitiesOnly=yes \
             -o BatchMode=yes \
+            -p ${{ inputs.remote_port }} \
             ${{ inputs.remote_user }}@${{ inputs.remote_host }} exit 2>&1 || true
           
           exit 1
@@ -181,7 +191,8 @@ runs:
         }
         
         echo "Pushing to remote repository (branch: ${BRANCH})..."
-        GIT_SSH_COMMAND="ssh -v -i ~/.ssh/id_ed25519 -p ${{ inputs.remote_port }}" \
+        # Use GIT_SSH_COMMAND to ensure git uses the correct SSH configuration
+        GIT_SSH_COMMAND="ssh -v -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -p ${{ inputs.remote_port }}" \
         git push destination "${BRANCH}" || {
           echo "Error: Failed to push to remote repository"
           exit 1
