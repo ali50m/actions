@@ -1,0 +1,97 @@
+name: "push to custom repo"
+description: "push to custom git repository"
+inputs:
+  remote_user:
+    description: "remote username"
+    required: true
+  remote_host:
+    description: "remote host"
+    required: true
+  remote_port:
+    description: "remote ssh port"
+    required: true
+  remote_path:
+    description: "remote repository path"
+    required: true
+  ssh_key:
+    description: "ssh private key"
+    required: true
+  branch:
+    description: "branch to push (defaults to current branch)"
+    required: false
+    default: ${GITHUB_REF##*/}
+
+runs:
+  using: "composite"
+  steps:
+    - name: push to custom repo
+      run: |
+        set -e
+        
+        echo "Starting push to custom repository action..."
+        
+        # Validate port number
+        echo "Validating port number..."
+        if ! [[ "${{ inputs.remote_port }}" =~ ^[0-9]+$ ]] || [ "${{ inputs.remote_port }}" -lt 1 ] || [ "${{ inputs.remote_port }}" -gt 65535 ]; then
+          echo "Error: Invalid port number"
+          exit 1
+        fi
+        
+        echo "Fetching repository history..."
+        git fetch --unshallow || true
+        
+        echo "Setting up SSH configuration..."
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        echo "${{ inputs.ssh_key }}" > ~/.ssh/id_rsa
+        
+        # Validate SSH key format
+        echo "Validating SSH key format..."
+        if ! ssh-keygen -l -f ~/.ssh/id_rsa &>/dev/null; then
+          echo "Error: Invalid SSH private key format"
+          rm -f ~/.ssh/id_rsa
+          exit 1
+        fi
+        
+        chmod 600 ~/.ssh/id_rsa
+        
+        echo "Adding remote host to known hosts..."
+        ssh-keyscan -p ${{ inputs.remote_port }} ${{ inputs.remote_host }} >> ~/.ssh/known_hosts || {
+          echo "Error: Failed to scan remote host key"
+          rm -f ~/.ssh/id_rsa
+          exit 1
+        }
+        
+        # Test SSH connection
+        echo "Testing SSH connection..."
+        if ! ssh -p ${{ inputs.remote_port }} -o BatchMode=yes -o StrictHostKeyChecking=yes ${{ inputs.remote_user }}@${{ inputs.remote_host }} exit 2>/dev/null; then
+          echo "Error: Failed to establish SSH connection"
+          rm -f ~/.ssh/id_rsa
+          exit 1
+        fi
+        
+        REMOTE_URL="ssh://${{ inputs.remote_user }}@${{ inputs.remote_host }}:${{ inputs.remote_port }}${{ inputs.remote_path }}"
+        BRANCH="${{ inputs.branch }}"
+        
+        echo "Adding git remote..."
+        git remote add destination "${REMOTE_URL}" || {
+          echo "Error: Failed to add git remote"
+          rm -f ~/.ssh/id_rsa
+          exit 1
+        }
+        
+        echo "Pushing to remote repository (branch: ${BRANCH})..."
+        git push destination "${BRANCH}" || {
+          echo "Error: Failed to push to remote repository"
+          git remote remove destination
+          rm -f ~/.ssh/id_rsa
+          exit 1
+        }
+        
+        # Clean up
+        echo "Cleaning up..."
+        git remote remove destination || true
+        rm -f ~/.ssh/id_rsa
+        
+        echo "Successfully pushed to custom repository"
+      shell: bash
