@@ -7,6 +7,10 @@ inputs:
   path:
     description: "artifact path"
     required: true
+  if-no-files-found:
+    description: "if no files found, do not fail the job, [warn]/error/ignore"
+    required: false
+    default: "warn"
 
 runs:
   using: "composite"
@@ -16,4 +20,4 @@ runs:
       with:
         name: ${{ inputs.name }}
         path: ${{ inputs.path }}
-
+        if-no-files-found: ${{ inputs.if-no-files-found }}
