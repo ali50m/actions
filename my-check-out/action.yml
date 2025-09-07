@@ -4,6 +4,10 @@ inputs:
   path:
     description: "path to checkout"
     required: false
+  persist-credentials:
+    description: "保持 GITHUB_TOKEN，用于后续 git push"
+    default: true
+    required: false
 
 runs:
   using: "composite"
@@ -12,3 +16,4 @@ runs:
       uses: actions/checkout@v4
       with:
         path: ${{ inputs.path }}
+        persist-credentials: ${{ inputs.persist-credentials }}
