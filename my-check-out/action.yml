@@ -12,8 +12,8 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: check out with v4
-      uses: actions/checkout@v4
+    - name: check out with checkout
+      uses: actions/checkout@v6
       with:
         path: ${{ inputs.path }}
         persist-credentials: ${{ inputs.persist-credentials }}
