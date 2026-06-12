@@ -28,28 +28,22 @@ runs:
         REPO: ${{ github.event.repository.name }}
         ACTOR: ${{ github.actor }}
       run: |
-        set -euo pipefail
-
-        ref="${GITHUB_REF##*/}"
-        message=$(cat <<END
+        ref=${GITHUB_REF##*/}
+        message=$(cat <<-END
         ${REPO}/${ref}
         ${RESULT}_${NOW}${HREF}
         END
         )
         
-        encrypted="U2FsdGVkX19xlWjV/OyDgsWs7SDdWQgw1Ghspe/65jTJxnzGgSv8/ECLajCWm9G3tSCdY9Yctx7YNekbz+R1eGd7G90nKrVpJFhemSZw3o4lyKSDgqtyptFKPEM75eqJmSRIc8N51Wt+C/YEP84GvA=="
-        decrypted=$(printf '%s' "${encrypted}" | openssl aes-256-cbc -pbkdf2 -d -a -pass "pass:${WEIXIN}")
+        encrypted="U2FsdGVkX19xlWjV/OyDgsWs7SDdWQgw1Ghspe/65jTJxnzGgSv8/ECLajCWm9G3
+        tSCdY9Yctx7YNekbz+R1eGd7G90nKrVpJFhemSZw3o4lyKSDgqtyptFKPEM75eqJ
+        mSRIc8N51Wt+C/YEP84GvA=="
+        decrypted=$(echo ${encrypted} | openssl aes-256-cbc -pbkdf2 -d -a -pass "pass:${WEIXIN}")
         echo "::add-mask::${decrypted}"
-
-        token_response=$(curl -fsS "https://qyapi.weixin.qq.com/cgi-bin/gettoken?${decrypted}")
-        token=$(printf '%s' "${token_response}" | jq --raw-output '.access_token // empty')
-        if [[ -z "${token}" ]]; then
-          errmsg=$(printf '%s' "${token_response}" | jq --raw-output '.errmsg // "missing access_token"')
-          echo "获取 access_token 失败: ${errmsg}" >&2
-          exit 1
-        fi
+        token=$(echo $(curl -sS "https://qyapi.weixin.qq.com/cgi-bin/gettoken?${decrypted}") | jq --raw-output .access_token)
         echo "::add-mask::${token}"
           
+        header="Content-Type: application/json"
         url="https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=${token}"
         body=$(jq -n \
           --arg touser "${ACTOR}" \
@@ -62,29 +56,22 @@ runs:
               content: $content
             }
           }')
-        response=$(curl -fsS -H "Content-Type: application/json" -X POST "${url}" --data-raw "${body}")
-        errcode=$(printf '%s' "${response}" | jq --raw-output '.errcode // -1')
-        if [[ "${errcode}" != "0" ]]; then
-          errmsg=$(printf '%s' "${response}" | jq --raw-output '.errmsg // "unknown error"')
-          echo "发送消息失败: ${errmsg}" >&2
-          exit 1
-        fi
+        curl -H "$header" -X POST "$url" --data-raw "$body"
         
     - name: call API to send weixin (Windows)
       if: runner.os == 'Windows'
       shell: pwsh
       env:
         WEIXIN: ${{ inputs.weixin }}
-        RESULT: ${{ inputs.result }}
-        NOW: ${{ inputs.now }}
-        HREF: ${{ inputs.href }}
-        REPO: ${{ github.event.repository.name }}
-        ACTOR: ${{ github.actor }}
       run: |
+        $repo = "${{github.event.repository.name}}"
         $ref = $env:GITHUB_REF -replace '.*/'
+        $result = "${{inputs.result}}"
+        $now = "${{inputs.now}}"
+        $href = "${{inputs.href}}"
         $message = @"
-        ${env:REPO}/$ref
-        ${env:RESULT}_${env:NOW}${env:HREF}
+        $repo/$ref
+        $result`_$now$href
         "@.Trim()
         
         $encrypted = "U2FsdGVkX19xlWjV/OyDgsWs7SDdWQgw1Ghspe/65jTJxnzGgSv8/ECLajCWm9G3tSCdY9Yctx7YNekbz+R1eGd7G90nKrVpJFhemSZw3o4lyKSDgqtyptFKPEM75eqJmSRIc8N51Wt+C/YEP84GvA=="
@@ -93,15 +80,11 @@ runs:
         
         $tokenResponse = Invoke-RestMethod -Uri "https://qyapi.weixin.qq.com/cgi-bin/gettoken?$decrypted" -Method Get
         $token = $tokenResponse.access_token
-        if ([string]::IsNullOrWhiteSpace($token)) {
-          Write-Error "获取 access_token 失败: $($tokenResponse.errmsg)"
-          exit 1
-        }
         Write-Output "::add-mask::$token"
         
         $url = "https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=$token"
         $body = @{
-          touser = $env:ACTOR
+          touser = "${{github.actor}}"
           msgtype = "text"
           agentid = 1000002
           text = @{
