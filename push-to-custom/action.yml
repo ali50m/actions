@@ -20,20 +20,34 @@ inputs:
   branch:
     description: "branch to push (defaults to current branch)"
     required: false
-    default: ${GITHUB_REF##*/}
+    default: ""
 
 runs:
   using: "composite"
   steps:
     - name: push to custom repo
+      env:
+        REMOTE_USER: ${{ inputs.remote_user }}
+        REMOTE_HOST: ${{ inputs.remote_host }}
+        REMOTE_PORT: ${{ inputs.remote_port }}
+        REMOTE_PATH: ${{ inputs.remote_path }}
+        SSH_KEY: ${{ inputs.ssh_key }}
+        BRANCH_INPUT: ${{ inputs.branch }}
       run: |
-        set -e
-        set -o pipefail  # Ensure pipeline errors are caught
+        set -euo pipefail
+        
+        SSH_DIR="${RUNNER_TEMP:-/tmp}/push-to-custom-ssh"
+        SSH_KEY_FILE="${SSH_DIR}/id_key"
+        SSH_KNOWN_HOSTS="${SSH_DIR}/known_hosts"
+        REMOTE_NAME="push-to-custom-destination"
+        CREATED_REMOTE=0
         
         cleanup() {
           echo "Cleaning up..."
-          git remote remove destination 2>/dev/null || true
-          rm -f ~/.ssh/id_key ~/.ssh/id_key.pub ~/.ssh/config ~/.ssh/known_hosts
+          if [ "${CREATED_REMOTE}" = "1" ]; then
+            git remote remove "${REMOTE_NAME}" 2>/dev/null || true
+          fi
+          rm -rf "${SSH_DIR}"
         }
         
         trap cleanup EXIT  # Ensure cleanup runs on exit
@@ -41,14 +55,14 @@ runs:
         echo "Starting push to custom repository action..."
         
         # Validate inputs
-        if [[ ! "${{ inputs.remote_path }}" =~ ^/ ]]; then
+        if [[ ! "${REMOTE_PATH}" =~ ^/ ]]; then
           echo "Error: remote_path must start with /"
           exit 1
         fi
         
-        if ! [[ "${{ inputs.remote_port }}" =~ ^[0-9]+$ ]] || \
-           [ "${{ inputs.remote_port }}" -lt 1 ] || \
-           [ "${{ inputs.remote_port }}" -gt 65535 ]; then
+        if ! [[ "${REMOTE_PORT}" =~ ^[0-9]+$ ]] || \
+           [ "${REMOTE_PORT}" -lt 1 ] || \
+           [ "${REMOTE_PORT}" -gt 65535 ]; then
           echo "Error: Invalid port number"
           exit 1
         fi
@@ -60,71 +74,72 @@ runs:
         fi
         
         echo "Setting up SSH configuration..."
-        mkdir -p ~/.ssh
-        chmod 700 ~/.ssh
+        rm -rf "${SSH_DIR}"
+        mkdir -p "${SSH_DIR}"
+        chmod 700 "${SSH_DIR}"
         
         # Write SSH key to file
-        echo "${{ inputs.ssh_key }}" > ~/.ssh/id_key
-        chmod 600 ~/.ssh/id_key
+        printf '%s\n' "${SSH_KEY}" > "${SSH_KEY_FILE}"
+        chmod 600 "${SSH_KEY_FILE}"
         
         # Try to extract public key from private key
-        if ! ssh-keygen -y -f ~/.ssh/id_key > ~/.ssh/id_key.pub 2>/dev/null; then
+        if ! ssh-keygen -y -f "${SSH_KEY_FILE}" > "${SSH_KEY_FILE}.pub" 2>/dev/null; then
           echo "Warning: Could not extract public key from private key"
           
           # Try to fix key format issues
-          if ! grep -q "BEGIN" ~/.ssh/id_key; then
+          if ! grep -q "BEGIN" "${SSH_KEY_FILE}"; then
             echo "Attempting to fix key format..."
-            cat ~/.ssh/id_key | base64 -d > ~/.ssh/id_key.tmp 2>/dev/null && mv ~/.ssh/id_key.tmp ~/.ssh/id_key
-            chmod 600 ~/.ssh/id_key
+            base64 -d "${SSH_KEY_FILE}" > "${SSH_KEY_FILE}.tmp" 2>/dev/null && mv "${SSH_KEY_FILE}.tmp" "${SSH_KEY_FILE}"
+            chmod 600 "${SSH_KEY_FILE}"
           fi
           
           # Try to extract public key again
-          if ! ssh-keygen -y -f ~/.ssh/id_key > ~/.ssh/id_key.pub 2>/dev/null; then
+          if ! ssh-keygen -y -f "${SSH_KEY_FILE}" > "${SSH_KEY_FILE}.pub" 2>/dev/null; then
             echo "Error: Invalid SSH key format. Please provide a valid private key."
             exit 1
           fi
         fi
-        
-        # Create a minimal SSH config file
-        cat > ~/.ssh/config << 'EOL'
-        Host *
-            StrictHostKeyChecking yes
-            IdentitiesOnly yes
-            BatchMode yes
-        EOL
-        chmod 600 ~/.ssh/config
-        
+
         # Add remote host to known hosts
-        ssh-keyscan -p ${{ inputs.remote_port }} ${{ inputs.remote_host }} >> ~/.ssh/known_hosts 2>/dev/null || {
+        ssh-keyscan -p "${REMOTE_PORT}" "${REMOTE_HOST}" >> "${SSH_KNOWN_HOSTS}" 2>/dev/null || {
           echo "Error: Failed to scan remote host key"
           exit 1
         }
-        chmod 600 ~/.ssh/known_hosts
+        chmod 600 "${SSH_KNOWN_HOSTS}"
         
         # Test SSH connection
         echo "Testing SSH connection..."
-        if ! ssh -i ~/.ssh/id_key -p ${{ inputs.remote_port }} ${{ inputs.remote_user }}@${{ inputs.remote_host }} exit 2>/dev/null; then
+        SSH_COMMAND="ssh -i ${SSH_KEY_FILE} -o UserKnownHostsFile=${SSH_KNOWN_HOSTS} -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -p ${REMOTE_PORT}"
+        if ! ${SSH_COMMAND} "${REMOTE_USER}@${REMOTE_HOST}" exit 2>/dev/null; then
           echo "Error: Failed to establish SSH connection"
           echo "Please verify that:"
           echo "1. The SSH key is valid"
           echo "2. The public key is in authorized_keys on the server"
-          echo "3. The server allows SSH connections on port ${{ inputs.remote_port }}"
+          echo "3. The server allows SSH connections on port ${REMOTE_PORT}"
           exit 1
         fi
         
         # Set up git remote and push
-        REMOTE_URL="ssh://${{ inputs.remote_user }}@${{ inputs.remote_host }}:${{ inputs.remote_port }}${{ inputs.remote_path }}"
-        BRANCH="${{ inputs.branch }}"
+        REMOTE_URL="ssh://${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PORT}${REMOTE_PATH}"
+        BRANCH="${BRANCH_INPUT}"
+        if [ -z "${BRANCH}" ]; then
+          BRANCH="${GITHUB_REF##*/}"
+        fi
         
         echo "Adding git remote..."
-        git remote add destination "${REMOTE_URL}" || {
+        if git remote get-url "${REMOTE_NAME}" >/dev/null 2>&1; then
+          echo "Error: Git remote '${REMOTE_NAME}' already exists"
+          exit 1
+        fi
+        git remote add "${REMOTE_NAME}" "${REMOTE_URL}" || {
           echo "Error: Failed to add git remote"
           exit 1
         }
+        CREATED_REMOTE=1
         
         echo "Pushing to remote repository (branch: ${BRANCH})..."
-        GIT_SSH_COMMAND="ssh -i ~/.ssh/id_key -p ${{ inputs.remote_port }}" \
-        git push destination "${BRANCH}" || {
+        GIT_SSH_COMMAND="${SSH_COMMAND}" \
+        git push "${REMOTE_NAME}" "${BRANCH}" || {
           echo "Error: Failed to push to remote repository"
           exit 1
         }
