@@ -12,12 +12,52 @@ runs:
   using: "composite"
   steps:
     - name: push to gitee
+      env:
+        GITEE_USERNAME: ${{ inputs.username }}
+        GITEE_SSH_KEY: ${{ inputs.GITEE_SSH_KEY }}
+        REPO_NAME: ${{ github.event.repository.name }}
       run: |
-        git fetch --unshallow
-        git remote add gitee git@gitee.com:${{ inputs.username }}/${{ github.event.repository.name }}.git
-        mkdir -p ~/.ssh
-        echo "${{ inputs.GITEE_SSH_KEY }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan gitee.com >> ~/.ssh/known_hosts
-        git push --force --set-upstream gitee ${GITHUB_REF##*/}
+        set -euo pipefail
+
+        SSH_DIR="${RUNNER_TEMP:-/tmp}/push-to-gitee-ssh"
+        SSH_KEY_FILE="${SSH_DIR}/id_rsa"
+        SSH_KNOWN_HOSTS="${SSH_DIR}/known_hosts"
+        REMOTE_NAME="push-to-gitee-destination"
+        CREATED_REMOTE=0
+
+        cleanup() {
+          echo "Cleaning up..."
+          if [ "${CREATED_REMOTE}" = "1" ]; then
+            git remote remove "${REMOTE_NAME}" 2>/dev/null || true
+          fi
+          rm -rf "${SSH_DIR}"
+        }
+
+        trap cleanup EXIT
+
+        if git rev-parse --is-shallow-repository | grep -q "true"; then
+          git fetch --unshallow
+        fi
+
+        mkdir -p "${SSH_DIR}"
+        chmod 700 "${SSH_DIR}"
+        printf '%s\n' "${GITEE_SSH_KEY}" > "${SSH_KEY_FILE}"
+        chmod 600 "${SSH_KEY_FILE}"
+
+        ssh-keyscan gitee.com >> "${SSH_KNOWN_HOSTS}" 2>/dev/null || {
+          echo "Error: Failed to scan gitee.com host key"
+          exit 1
+        }
+        chmod 600 "${SSH_KNOWN_HOSTS}"
+
+        if git remote get-url "${REMOTE_NAME}" >/dev/null 2>&1; then
+          echo "Error: Git remote '${REMOTE_NAME}' already exists"
+          exit 1
+        fi
+
+        git remote add "${REMOTE_NAME}" "git@gitee.com:${GITEE_USERNAME}/${REPO_NAME}.git"
+        CREATED_REMOTE=1
+
+        GIT_SSH_COMMAND="ssh -i ${SSH_KEY_FILE} -o UserKnownHostsFile=${SSH_KNOWN_HOSTS} -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes" \
+        git push --force --set-upstream "${REMOTE_NAME}" "${GITHUB_REF##*/}"
       shell: bash
